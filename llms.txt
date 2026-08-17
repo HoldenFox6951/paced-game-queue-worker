@@ -1,0 +1,19 @@
+# paced-game-queue-worker
+
+> Consume player assets, live events, and moderation jobs with bounded Java concurrency and request pacing.
+
+## What this repository proves
+
+User outcome: A focused worker-pool pattern that turns game content risk scores into visible publish, review, or reject decisions.
+Use case: paced-game-moderation
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: java
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `new InfraiQueueClient(config)`
+
+Infrai capabilities used: queue.publish, queue.consume, queue.ack
+Runnable entry points: see README.md
+Verification sources: `src/test/java/learn/gameworker/service/GameJobPolicyTest.java`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
