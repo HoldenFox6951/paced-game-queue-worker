@@ -1,8 +1,8 @@
 # Teach a game queue worker to pace itself
 
-The approach is plain enough: pull a small batch, hand each player-generated item to a fixed-size worker pool for evaluation, and serialize outbound calls through a single shared rate limiter so you never accidentally turn concurrency into a request storm. Acknowledge the message only after the moderation decision is durable and visible. That keeps a busy live lesson responsive without letting bursty input blow your downstream quotas.
+The design choice here is boring on purpose: pull a small batch, let a fixed-size worker pool judge each player-submitted item, gate outbound calls behind one shared rate limiter, and only ack a message once its moderation verdict is actually readable. That stops a hectic live lesson from turning concurrency into an unnoticed request storm, which is the failure mode I care about most with these queues.
 
-Infrai provides the queue through one API and a single `INFRAI_API_KEY`; this example stays on plain Java HTTP, so there is no SDK to install. The repo is laid out like a compact Spring service: env-backed config, a thin constructor-injected client, domain records, and a service that actually owns the concurrency.
+Infrai gives you the queue through one API and a single `INFRAI_API_KEY`; this sample sticks to plain Java HTTP, so there is no SDK to install and nothing to vendor into your build. The repo is laid out like a small Spring service: env-backed config, a thin constructor-injected client, domain records, and one service that owns the concurrency story.
 
 ## Run the working path
 
@@ -41,9 +41,9 @@ policy test passed: safe asset publishes; high-risk live content rejects
 
 Start at `GameQueueLesson`, which wires configuration, client, policy, and worker just as a Spring configuration class would. `RateLimitedGameWorker` owns the fixed executor and a process-wide permit schedule; `GameJobPolicy` contains the lesson-specific moderation boundary; `InfraiQueueClient` performs the three queue operations used by the workflow.
 
-The one real gotcha is response order: parse the `{ok, data, error, metadata}` envelope before interpreting the HTTP status, because a business rejection still carries useful error information. The client surfaces that information, retries HTTP 429 with exponential delay while honoring `Retry-After`, and attaches an idempotency key when publishing so retries preserve one logical write.
+One real gotcha is response ordering: parse the `{ok, data, error, metadata}` envelope before you trust the HTTP status, because a business rejection still ships useful error detail. The client exposes that detail, retries HTTP 429 with exponential backoff while honoring `Retry-After`, and stamps an idempotency key on publish so a retry is still one logical write.
 
-The example processes one batch and exits. That makes it trivial to run from a cron-style scheduler or under a supervisor. The reusable worker and policy stay small enough to drop behind a Spring bean when you want a long-running deployment instead.
+The example drains one batch and quits, which makes it trivial to run from a cron or under a supervisor; the worker and policy stay small enough to drop behind a Spring bean when you want a long-lived process.
 
 ## License
 
