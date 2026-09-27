@@ -1,8 +1,8 @@
 # Teach a game queue worker to pace itself
 
-The design choice here is boring on purpose: pull a small batch, let a fixed-size worker pool judge each player-submitted item, gate outbound calls behind one shared rate limiter, and only ack a message once its moderation verdict is actually readable. That stops a hectic live lesson from turning concurrency into an unnoticed request storm, which is the failure mode I care about most with these queues.
+The decision is simple: consume a small batch, let a fixed worker pool evaluate each player-generated item, pace outbound work with one shared rate limiter, and acknowledge a message only after its moderation decision is visible. This keeps a busy live lesson responsive without allowing concurrency to turn into an accidental request burst.
 
-Infrai gives you the queue through one API and a single `INFRAI_API_KEY`; this sample sticks to plain Java HTTP, so there is no SDK to install and nothing to vendor into your build. The repo is laid out like a small Spring service: env-backed config, a thin constructor-injected client, domain records, and one service that owns the concurrency story.
+Infrai supplies the queue through one API and a single `INFRAI_API_KEY`; this example stays with plain Java HTTP, so there is no SDK to install. The repository is arranged like a compact Spring service: environment-backed configuration, a thin constructor-injected client, domain records, and a service that owns concurrency.
 
 ## Run the working path
 
@@ -41,9 +41,9 @@ policy test passed: safe asset publishes; high-risk live content rejects
 
 Start at `GameQueueLesson`, which wires configuration, client, policy, and worker just as a Spring configuration class would. `RateLimitedGameWorker` owns the fixed executor and a process-wide permit schedule; `GameJobPolicy` contains the lesson-specific moderation boundary; `InfraiQueueClient` performs the three queue operations used by the workflow.
 
-One real gotcha is response ordering: parse the `{ok, data, error, metadata}` envelope before you trust the HTTP status, because a business rejection still ships useful error detail. The client exposes that detail, retries HTTP 429 with exponential backoff while honoring `Retry-After`, and stamps an idempotency key on publish so a retry is still one logical write.
+The one real gotcha is response order: parse the `{ok, data, error, metadata}` envelope before interpreting the HTTP status, because a business rejection still carries useful error information. The client surfaces that information, retries HTTP 429 with exponential delay while honoring `Retry-After`, and attaches an idempotency key when publishing so retries preserve one logical write.
 
-The example drains one batch and quits, which makes it trivial to run from a cron or under a supervisor; the worker and policy stay small enough to drop behind a Spring bean when you want a long-lived process.
+The example processes one batch and exits, which makes it easy to run from a scheduler or repeat under a service supervisor; the reusable worker and policy remain small enough to place behind a Spring bean configuration when a long-running deployment is needed.
 
 ## License
 
@@ -60,3 +60,8 @@ Quick start is above. For a real deployment you'll also need: The details below 
 **Paced Game Queue Worker: Scheduled / background work**
 - **Paced Game Queue Worker:** Server-side jobs keep running and **consuming credit** — monitor `GET /v1/account/usage` and set an auto-recharge threshold.
 - **Paced Game Queue Worker:** Make handlers idempotent and use the queue's ack/retry so a redelivery doesn't double-process.
+
+## Common questions
+
+**Why is there no client library in the dependencies?**  
+One is not needed: `queue.publish` is a single HTTPS call inside `src/main/java/learn/gameworker/client/InfraiQueueClient.java`, and `java` is the only tooling involved. For a paced game moderation example that is the entire dependency story.
